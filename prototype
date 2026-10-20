@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STM32 Smart Data Acquisition & Diagnostic Instrument</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --chassis-bg: #111827;
+            --bezel-border: #f59e0b;
+            --screen-bg: #0b132b;
+            --accent-yellow: #f59e0b;
+            --accent-blue: #2563eb;
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+        }
+
+        body {
+            background-color: #030712;
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .instrument-chassis {
+            background: linear-gradient(145deg, #1f2937, #111827);
+            border: 3px solid #374151;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .tft-display {
+            background: radial-gradient(circle at center, #0d1b2a 0%, #050c1a 100%);
+            border: 2px solid #2563eb;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9), 0 0 10px rgba(37, 99, 235, 0.2);
+        }
+
+        /* Tactile Enclosure Screws */
+        .chassis-screw {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6b7280 0%, #1f2937 100%);
+            box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.3), 0 1px 2px rgba(0, 0, 0, 0.8);
+            position: relative;
+        }
+
+        .chassis-screw::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 1px;
+            width: 8px;
+            height: 2px;
+            background: #111827;
+            transform: rotate(45deg);
+        }
+
+        /* Tactile Keypad Buttons */
+        .btn-keypad {
+            background: linear-gradient(180deg, #374151 0%, #1f2937 100%);
+            border: 1px solid #4b5563;
+            box-shadow: 0 3px 0 #111827, 0 4px 6px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+            transition: all 0.08s ease;
+        }
+
+        .btn-keypad:active,
+        .btn-keypad.active-press {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #111827, 0 2px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Solid High-Precision PWM LEDs */
+        .led-off {
+            background-color: #1e293b;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+            opacity: 0.3;
+        }
+
+        .led-solid-green {
+            background-color: #10b981;
+            box-shadow: 0 0 12px #10b981, inset 0 1px 2px #ffffff;
+            opacity: 1;
+        }
+
+        .led-solid-yellow {
+            background-color: #f59e0b;
+            box-shadow: 0 0 12px #f59e0b, inset 0 1px 2px #ffffff;
+            opacity: 1;
+        }
+
+        .led-solid-red {
+            background-color: #ef4444;
+            box-shadow: 0 0 14px #ef4444, inset 0 1px 2px #ffffff;
+            opacity: 1;
+            /* Solid red, strictly non-blinking */
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2563eb;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body class="h-full flex flex-col items-center justify-center p-2 sm:p-4 select-none" id="app-root">
+
+    <!-- Warning / Notification Toast Modal -->
+    <div id="toast-modal"
+        class="fixed top-5 z-50 transform -translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+        <div id="toast-content"
+            class="bg-slate-900 border-2 border-red-500 text-slate-100 px-6 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3.5">
+            <i id="toast-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-2xl"></i>
+            <div>
+                <h4 id="toast-title" class="font-bold text-sm text-red-400 font-mono tracking-wide"></h4>
+                <p id="toast-msg" class="text-xs text-slate-200 font-sans"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Physical Instrument Enclosure -->
+    <div class="w-full max-w-5xl instrument-chassis rounded-2xl p-4 sm:p-6 flex flex-col space-y-4 relative">
+
+        <!-- Chassis Screws -->
+        <div class="chassis-screw absolute top-3 left-3"></div>
+        <div class="chassis-screw absolute top-3 right-3"></div>
+        <div class="chassis-screw absolute bottom-3 left-3"></div>
+        <div class="chassis-screw absolute bottom-3 right-3"></div>
+
+        <!-- Top Header & SD Card Slot Area -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 pb-3 px-2">
+
+            <!-- Left Header: Brand & SD Card Reader Status -->
+            <div class="flex items-center space-x-4">
+                <!-- SD Slot Component (Top-Left Hardware Position) -->
+                <div class="bg-slate-900 border border-slate-700 rounded-lg p-2 flex items-center space-x-3">
+                    <div class="flex items-center space-x-2">
+                        <div id="sd-led-indicator" class="w-3.5 h-3.5 rounded-full led-solid-green transition-all">
+                        </div>
+                        <i class="fa-solid fa-sd-card text-blue-400 text-sm"></i>
+                    </div>
+                    <div class="text-[11px] font-mono">
+                        <div id="sd-status-text" class="text-emerald-400 font-bold">SD: SAFE TO REMOVE</div>
+                        <div id="sd-sub-text" class="text-slate-400 text-[9px]">Solid Red = Scanning • Solid Green =
+                            Ready</div>
+                    </div>
+                    <button onclick="handleSDEjectTrigger()"
+                        class="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-[10px] font-mono text-slate-200 transition active:scale-95 flex items-center gap-1 font-bold">
+                        <i class="fa-solid fa-eject text-amber-400"></i> EJECT
+                    </button>
+                </div>
+
+                <div class="hidden sm:block border-l border-slate-700 h-8"></div>
+
+                <!-- Instrument Model -->
+                <div class="hidden md:block">
+                    <h1 class="text-sm font-bold text-slate-100 font-mono tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-microchip text-amber-400"></i> STM32 SMART DAQ & DIAGNOSTIC INSTRUMENT
+                    </h1>
+                    <p class="text-[10px] font-mono text-slate-400">ARM CORTEX-M4 • REAL-TIME MULTI-SENSOR ANALYZER</p>
+                </div>
+            </div>
+
+            <!-- Right Controls: System Reboot button -->
+            <div class="flex items-center space-x-3">
+                <button onclick="triggerSystemReboot()"
+                    class="bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 text-xs font-mono px-3 py-1.5 rounded-lg transition active:scale-95 flex items-center gap-1.5 font-bold"
+                    title="Press ESC on keyboard to reboot anytime">
+                    <i class="fa-solid fa-power-off"></i> <span>REBOOT</span> <kbd
+                        class="bg-red-950/80 px-1.5 py-0.5 rounded text-[9px] border border-red-800">ESC</kbd>
+                </button>
+            </div>
+        </div>
+
+        <!-- TFT Display Screen (Center Stage) -->
+        <div id="tft-screen"
+            class="tft-display w-full h-[420px] sm:h-[460px] rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+
+            <!-- TFT Top Bar -->
+            <div class="flex justify-between items-center border-b border-slate-800/80 pb-2 mb-2 font-mono text-xs">
+                <div class="flex items-center space-x-2">
+                    <span class="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded border border-blue-500/40 font-bold"
+                        id="screen-breadcrumb">POST DIAGNOSTIC</span>
+                    <span id="screen-app-tag" class="hidden text-amber-400 font-bold"></span>
+                </div>
+                <div class="flex items-center space-x-3 text-slate-300 text-[11px]">
+                    <span class="flex items-center gap-1 font-bold text-slate-200"><i
+                            class="fa-solid fa-clock text-amber-400"></i> <span id="rtc-clock">2026-10-16
+                            00:00:00</span></span>
+                </div>
+            </div>
+
+            <!-- TFT Screen Content Box -->
+            <div id="screen-view"
+                class="flex-1 flex flex-col justify-center items-center relative overflow-y-auto my-1">
+                <!-- Views injected via JS -->
+            </div>
+
+            <!-- TFT Bottom Bar -->
+            <div
+                class="pt-2 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                <div>STM32F407 HAL v2.4 • SPI / I2C ACTIVE</div>
+                <div id="screen-status-msg" class="text-emerald-400 font-bold">SYS_READY</div>
+            </div>
+        </div>
+
+        <!-- Hardware Peripheral Control Strip -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+
+            <!-- Bottom-Left: Diagnostic PWM LEDs (Normal, Anomaly, Critical) -->
+            <div
+                class="md:col-span-5 bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between space-y-2">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                    <span class="text-xs font-mono font-bold text-slate-200 tracking-wide flex items-center gap-1.5">
+                        <i class="fa-solid fa-lightbulb text-amber-400"></i> DIAGNOSTIC LEDs (PWM)
+                    </span>
+                    <span class="text-[9px] font-mono text-slate-400">TIM3_CH1..3</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center py-1">
+                    <div
+                        class="p-2 rounded-lg bg-slate-950 border border-slate-800 flex flex-col items-center justify-center">
+                        <div id="led-normal" class="w-4 h-4 rounded-full led-off mb-1 transition-all"></div>
+                        <span class="text-[9px] font-mono text-emerald-400 font-bold">NORMAL</span>
+                    </div>
+                    <div
+                        class="p-2 rounded-lg bg-slate-950 border border-slate-800 flex flex-col items-center justify-center">
+                        <div id="led-anomaly" class="w-4 h-4 rounded-full led-off mb-1 transition-all"></div>
+                        <span class="text-[9px] font-mono text-amber-400 font-bold">ANOMALY</span>
+                    </div>
+                    <div
+                        class="p-2 rounded-lg bg-slate-950 border border-slate-800 flex flex-col items-center justify-center">
+                        <div id="led-critical" class="w-4 h-4 rounded-full led-off mb-1 transition-all"></div>
+                        <span class="text-[9px] font-mono text-red-400 font-bold">CRITICAL</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom-Right: Mode Switch Push Buttons -->
+            <div
+                class="md:col-span-7 bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between space-y-2">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                    <span class="text-xs font-mono font-bold text-slate-200 tracking-wide flex items-center gap-1.5">
+                        <i class="fa-solid fa-gamepad text-blue-400"></i> MODE SWITCH KEYPAD
+                    </span>
+                    <span class="text-[9px] font-mono text-slate-400">BUZZER SYNCHRONIZED</span>
+                </div>
+                <div class="grid grid-cols-5 gap-2">
+                    <button onclick="handleKeypadAction('up')" id="btn-up"
+                        class="btn-keypad py-2 rounded-lg text-slate-200 text-xs font-bold flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-chevron-up text-amber-400"></i>
+                        <span class="text-[8px] font-mono text-slate-400 mt-0.5">UP</span>
+                    </button>
+                    <button onclick="handleKeypadAction('down')" id="btn-down"
+                        class="btn-keypad py-2 rounded-lg text-slate-200 text-xs font-bold flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-chevron-down text-amber-400"></i>
+                        <span class="text-[8px] font-mono text-slate-400 mt-0.5">DOWN</span>
+                    </button>
+                    <button onclick="handleKeypadAction('select')" id="btn-select"
+                        class="btn-keypad py-2 rounded-lg text-emerald-400 text-xs font-bold flex flex-col items-center justify-center border-b-2 border-emerald-500">
+                        <i class="fa-solid fa-check"></i>
+                        <span class="text-[8px] font-mono text-emerald-400 mt-0.5">SELECT</span>
+                    </button>
+                    <button onclick="handleKeypadAction('back')" id="btn-back"
+                        class="btn-keypad py-2 rounded-lg text-blue-400 text-xs font-bold flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span class="text-[8px] font-mono text-blue-400 mt-0.5">BACK</span>
+                    </button>
+                    <button onclick="triggerSystemReboot()" id="btn-reset"
+                        class="btn-keypad py-2 rounded-lg text-red-400 text-xs font-bold flex flex-col items-center justify-center border-b-2 border-red-500">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span class="text-[8px] font-mono text-red-400 mt-0.5">RESET</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Live Sensor Simulation Tuner -->
+        <div
+            class="bg-slate-900/70 p-3 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+            <div class="flex items-center space-x-2 text-slate-300 font-bold">
+                <i class="fa-solid fa-sliders text-amber-400"></i>
+                <span>LIVE SENSOR SIMULATOR:</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center space-x-2 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                    <span class="text-slate-400 text-[11px]">Temp:</span>
+                    <input type="range" id="sim-temp-slider" min="20" max="110" value="42"
+                        oninput="handleManualTelemetryTuning()" class="w-20 accent-amber-400 cursor-pointer">
+                    <span id="sim-temp-val" class="text-amber-400 w-9 text-right font-bold">42°C</span>
+                </div>
+                <div class="flex items-center space-x-2 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+                    <span class="text-slate-400 text-[11px]">Vib RMS:</span>
+                    <input type="range" id="sim-vib-slider" min="0.5" max="10.0" step="0.1" value="1.2"
+                        oninput="handleManualTelemetryTuning()" class="w-20 accent-blue-400 cursor-pointer">
+                    <span id="sim-vib-val" class="text-blue-400 w-12 text-right font-bold">1.2m/s</span>
+                </div>
+                <div class="flex items-center space-x-1.5">
+                    <button onclick="setConditionPreset('NORMAL')"
+                        class="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded border border-emerald-500/40 text-[10px] font-bold">Preset
+                        Normal</button>
+                    <button onclick="setConditionPreset('ANOMALY')"
+                        class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded border border-amber-500/40 text-[10px] font-bold">Preset
+                        Anomaly</button>
+                    <button onclick="setConditionPreset('CRITICAL')"
+                        class="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded border border-red-500/40 text-[10px] font-bold">Preset
+                        Critical</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // Web Audio API Buzzer Synthesizer
+        let audioCtx = null;
+        function playBuzzerBeep(freq = 880, duration = 0.08, type = 'sine') {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                console.warn('Buzzer audio disabled', e);
+            }
+        }
+
+        // Custom Toast Alert
+        function showToast(title, msg, type = 'info') {
+            const toast = document.getElementById('toast-modal');
+            const titleEl = document.getElementById('toast-title');
+            const msgEl = document.getElementById('toast-msg');
+            const iconEl = document.getElementById('toast-icon');
+            const contentEl = document.getElementById('toast-content');
+
+            titleEl.innerText = title;
+            msgEl.innerText = msg;
+
+            if (type === 'error') {
+                contentEl.className = "bg-slate-900 border-2 border-red-500 text-slate-100 px-6 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3.5";
+                iconEl.className = "fa-solid fa-triangle-exclamation text-red-500 text-2xl";
+                playBuzzerBeep(240, 0.35, 'sawtooth');
+            } else if (type === 'success') {
+                contentEl.className = "bg-slate-900 border-2 border-emerald-500 text-slate-100 px-6 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3.5";
+                iconEl.className = "fa-solid fa-circle-check text-emerald-400 text-2xl";
+                playBuzzerBeep(1050, 0.1, 'sine');
+            } else {
+                contentEl.className = "bg-slate-900 border-2 border-blue-500 text-slate-100 px-6 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3.5";
+                iconEl.className = "fa-solid fa-circle-info text-blue-400 text-2xl";
+                playBuzzerBeep(880, 0.08, 'sine');
+            }
+
+            toast.classList.remove('-translate-y-24', 'opacity-0', 'pointer-events-none');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('-translate-y-24', 'opacity-0', 'pointer-events-none');
+            }, 3200);
+        }
+
+        // Application State & Data
+        let currentSystemState = 'boot'; // 'boot', 'app_select', 'mode_select', 'scanning', 'live_monitor', 'diagnostic'
+        let selectedAppIndex = 0;
+        const availableApplications = [
+            { id: 'motor', name: 'Industrial Induction Motor', desc: 'Bearing Thermal & Vibration Diagnostics', icon: 'fa-gears' },
+            { id: 'pump', name: 'Heavy-Duty Hydraulic Pump', desc: 'Pressure Cavitation & Line Flow Analysis', icon: 'fa-water' },
+            { id: 'hvac', name: 'Commercial HVAC Compressor', desc: 'Refrigerant Loop & Temperature Monitoring', icon: 'fa-snowflake' }
+        ];
+
+        let selectedModeIndex = 0;
+        const availableModes = [
+            { id: 'live', name: 'Live Measurement Mode', desc: 'Real-time telemetry gauges and status LEDs', icon: 'fa-chart-line' },
+            { id: 'diagnostic', name: 'Diagnostic Logging Mode', desc: 'Parallel SD record store with time stamps', icon: 'fa-sd-card' }
+        ];
+
+        let activeRecordFilter = 'ALL'; // 'ALL', 'NORMAL', 'ANOMALY', 'CRITICAL'
+        let systemHealthState = 'NORMAL';
+        let telemetryTimer = null;
+        let scanTimer = null;
+
+        let sensorTelemetry = {
+            temperature: 42.0,
+            humidity: 52.0,
+            vibrationRMS: 1.2,
+            sdState: 'IDLE', // 'IDLE' (Solid Green), 'SCANNING_WRITE' (Solid Red), 'EJECTED'
+            recordLogs: [
+                { id: 101, timestamp: '2026-10-16 10:14:02', temp: '41.2°C', vib: '1.1 mm/s', status: 'NORMAL', note: 'Normal Operation - All parameters within optimal thresholds.' },
+                { id: 102, timestamp: '2026-10-16 10:18:45', temp: '68.5°C', vib: '3.9 mm/s', status: 'ANOMALY', note: 'Suspected Anomaly - Elevated vibration detected in bearings.' },
+                { id: 103, timestamp: '2026-10-16 10:22:10', temp: '94.1°C', vib: '7.8 mm/s', status: 'CRITICAL', note: 'Critical Condition - Thermal threshold exceeded! Stop equipment.' }
+            ]
+        };
+
+        // Real-Time Clock Sync (RTC DS3231 Simulation)
+        setInterval(() => {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('rtc-clock').innerText = `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
+        }, 1000);
+
+        // Keyboard Shortcut Handler (ESC for reboot)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                triggerSystemReboot();
+            } else if (e.key === 'ArrowUp') {
+                handleKeypadAction('up');
+            } else if (e.key === 'ArrowDown') {
+                handleKeypadAction('down');
+            } else if (e.key === 'Enter') {
+                handleKeypadAction('select');
+            } else if (e.key === 'Backspace') {
+                handleKeypadAction('back');
+            }
+        });
+
+        // Initialize App
+        window.onload = function () {
+            triggerSystemReboot();
+        };
+
+        // Step 1: Self-Diagnostic Boot POST Sequence
+        function triggerSystemReboot() {
+            if (telemetryTimer) clearInterval(telemetryTimer);
+            if (scanTimer) clearTimeout(scanTimer);
+
+            playBuzzerBeep(440, 0.15, 'sawtooth');
+            setTimeout(() => playBuzzerBeep(880, 0.1, 'sine'), 180);
+
+            currentSystemState = 'boot';
+            selectedAppIndex = 0;
+            selectedModeIndex = 0;
+            systemHealthState = 'NORMAL';
+            sensorTelemetry.sdState = 'IDLE';
+
+            updatePWMDiagnosticLEDs('NORMAL');
+            updateSDSlotVisuals();
+
+            document.getElementById('screen-breadcrumb').innerText = "POST DIAGNOSTIC";
+            document.getElementById('screen-app-tag').classList.add('hidden');
+            document.getElementById('screen-status-msg').innerText = "SYS_BOOTING...";
+
+            const screen = document.getElementById('screen-view');
+            screen.innerHTML = `
+                <div class="flex flex-col items-center justify-center space-y-4 w-full max-w-md text-center">
+                    <div class="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-400 flex items-center justify-center text-blue-400 text-2xl animate-pulse shadow-lg">
+                        <i class="fa-solid fa-microchip"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-mono font-bold tracking-wider text-slate-100">STM32 SMART INSTRUMENT</h2>
+                        <p class="text-[11px] font-mono text-amber-400">Power-On Self Diagnostic Test (POST)</p>
+                    </div>
+
+                    <div class="w-full bg-slate-950/90 border border-slate-800 rounded-lg p-3 space-y-2 font-mono text-xs text-left" id="boot-log-container">
+                        <div class="text-blue-400 flex items-center gap-2"><i class="fa-solid fa-spinner animate-spin"></i> Initializing System Peripherals...</div>
+                    </div>
+                </div>
+            `;
+
+            const bootItems = [
+                "Testing TFT Display Controller (ILI9341)... [ OK ]",
+                "Checking Temperature Sensor (TMP36)... [ OK ]",
+                "Checking Relative Humidity Sensor (DHT22)... [ OK ]",
+                "Checking Vibration Sensor (ADXL335)... [ OK ]",
+                "Mounted SD Card FAT32 File System... [ OK ]",
+                "Synchronizing RTC Time Stamp (DS3231)... [ OK ]",
+                "Self-Diagnostic Passed. System Initialized."
+            ];
+
+            let step = 0;
+            const logBox = document.getElementById('boot-log-container');
+
+            const bootInterval = setInterval(() => {
+                if (step < bootItems.length) {
+                    const row = document.createElement('div');
+                    row.className = "text-slate-200 flex items-center gap-2 text-[11px]";
+                    row.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> ${bootItems[step]}`;
+                    logBox.appendChild(row);
+                    playBuzzerBeep(650 + (step * 60), 0.04);
+                    step++;
+                } else {
+                    clearInterval(bootInterval);
+                    setTimeout(() => {
+                        renderAppSelectionMenu();
+                    }, 500);
+                }
+            }, 280);
+        }
+
+        // Step 2: Application Selection Menu
+        function renderAppSelectionMenu() {
+            currentSystemState = 'app_select';
+            document.getElementById('screen-breadcrumb').innerText = "1. SELECT APPLICATION";
+            document.getElementById('screen-app-tag').classList.add('hidden');
+            document.getElementById('screen-status-msg').innerText = "NAV_ACTIVE";
+
+            renderAppSelectionUI();
+        }
+
+        function renderAppSelectionUI() {
+            const screen = document.getElementById('screen-view');
+            let cardsHTML = '';
+
+            availableApplications.forEach((app, idx) => {
+                const isSelected = idx === selectedAppIndex;
+                cardsHTML += `
+                    <div onclick="selectedAppIndex=${idx}; handleKeypadAction('select');" class="p-3 rounded-xl border transition cursor-pointer flex items-center justify-between ${isSelected ? 'bg-amber-500/20 border-amber-400 text-slate-100 shadow-lg' : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700'}">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-lg ${isSelected ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'} flex items-center justify-center text-sm">
+                                <i class="fa-solid ${app.icon}"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xs sm:text-sm text-slate-100">${app.name}</h4>
+                                <p class="text-[10px] font-mono text-slate-400">${app.desc}</p>
+                            </div>
+                        </div>
+                        ${isSelected ? '<i class="fa-solid fa-chevron-right text-amber-400 text-xs"></i>' : ''}
+                    </div>
+                `;
+            });
+
+            screen.innerHTML = `
+                <div class="w-full max-w-md flex flex-col space-y-3">
+                    <div class="text-center">
+                        <h3 class="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">Choose Target Appliance</h3>
+                        <p class="text-[10px] font-mono text-slate-400">Use KEYPAD UP / DOWN & SELECT</p>
+                    </div>
+                    <div class="flex flex-col space-y-2">
+                        ${cardsHTML}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Step 3: Operating Mode Selection
+        function renderModeSelectionMenu() {
+            currentSystemState = 'mode_select';
+            const app = availableApplications[selectedAppIndex];
+            document.getElementById('screen-breadcrumb').innerText = "2. SELECT MODE";
+            const tag = document.getElementById('screen-app-tag');
+            tag.innerText = `[ ${app.name.toUpperCase()} ]`;
+            tag.classList.remove('hidden');
+
+            renderModeSelectionUI();
+        }
+
+        function renderModeSelectionUI() {
+            const screen = document.getElementById('screen-view');
+            let modesHTML = '';
+
+            availableModes.forEach((mode, idx) => {
+                const isSelected = idx === selectedModeIndex;
+                modesHTML += `
+                    <div onclick="selectedModeIndex=${idx}; handleKeypadAction('select');" class="p-3.5 rounded-xl border transition cursor-pointer flex items-center justify-between ${isSelected ? 'bg-blue-500/20 border-blue-400 text-slate-100 shadow-lg' : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700'}">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-lg ${isSelected ? 'bg-blue-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'} flex items-center justify-center text-sm">
+                                <i class="fa-solid ${mode.icon}"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-xs sm:text-sm text-slate-100">${mode.name}</h4>
+                                <p class="text-[10px] font-mono text-slate-400">${mode.desc}</p>
+                            </div>
+                        </div>
+                        ${isSelected ? '<span class="text-[9px] font-mono px-2 py-0.5 bg-blue-500 text-slate-950 font-bold rounded">SELECT</span>' : ''}
+                    </div>
+                `;
+            });
+
+            screen.innerHTML = `
+                <div class="w-full max-w-md flex flex-col space-y-3">
+                    <div class="text-center">
+                        <h3 class="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">Choose Instrument Mode</h3>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2.5">
+                        ${modesHTML}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Trigger SD Scanning / Acquisition Cycle
+        function startScanningAndLoggingSequence() {
+            currentSystemState = 'scanning';
+            sensorTelemetry.sdState = 'SCANNING_WRITE';
+            updateSDSlotVisuals(); // LED turns SOLID RED (No blinking)
+
+            document.getElementById('screen-breadcrumb').innerText = "ACQUIRING & WRITING SD";
+            document.getElementById('screen-status-msg').innerText = "SD_WRITE_BUSY";
+
+            const screen = document.getElementById('screen-view');
+            screen.innerHTML = `
+                <div class="flex flex-col items-center justify-center space-y-4 w-full max-w-md text-center">
+                    <div class="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center text-red-500 text-2xl">
+                        <i class="fa-solid fa-sd-card"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-mono font-bold text-slate-100">Acquiring Sensor Signals & Logging Data...</h3>
+                        <p class="text-[11px] font-mono text-red-400 font-bold mt-1">SD LED: SOLID RED • DO NOT EJECT CARD</p>
+                    </div>
+
+                    <!-- Scan Progress Bar -->
+                    <div class="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-800 p-0.5">
+                        <div id="scan-progress" class="bg-red-500 h-full rounded-full transition-all duration-300" style="width: 5%"></div>
+                    </div>
+
+                    <div class="text-[10px] font-mono text-slate-400" id="scan-status-text">Sampling ADXL335 & TMP36 sensors...</div>
+                </div>
+            `;
+
+            let progress = 5;
+            const progressBar = document.getElementById('scan-progress');
+            const statusText = document.getElementById('scan-status-text');
+
+            const scanInterval = setInterval(() => {
+                progress += 20;
+                if (progressBar) progressBar.style.width = Math.min(100, progress) + '%';
+
+                if (progress === 45) {
+                    if (statusText) statusText.innerText = "Writing telemetry frame to SD FAT32 sector...";
+                    playBuzzerBeep(750, 0.05);
+                } else if (progress === 85) {
+                    if (statusText) statusText.innerText = "Appending timestamp entry to LOG_DATA.CSV...";
+                    playBuzzerBeep(850, 0.05);
+                }
+
+                if (progress >= 100) {
+                    clearInterval(scanInterval);
+
+                    // Add new recorded log
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const hours = String(now.getHours()).padStart(2, '0');
+                    const mins = String(now.getMinutes()).padStart(2, '0');
+                    const secs = String(now.getSeconds()).padStart(2, '0');
+                    const timestampStr = `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
+
+                    let plainEnglishNote = "Normal Operation - All parameters within optimal thresholds.";
+                    if (systemHealthState === 'ANOMALY') plainEnglishNote = "Suspected Anomaly - Elevated vibration detected in bearings.";
+                    if (systemHealthState === 'CRITICAL') plainEnglishNote = "Critical Condition - Thermal threshold exceeded! Stop equipment.";
+
+                    sensorTelemetry.recordLogs.unshift({
+                        id: 100 + sensorTelemetry.recordLogs.length + 1,
+                        timestamp: timestampStr,
+                        temp: `${sensorTelemetry.temperature}°C`,
+                        vib: `${sensorTelemetry.vibrationRMS} mm/s`,
+                        status: systemHealthState,
+                        note: plainEnglishNote
+                    });
+
+                    // SD write finished -> Turn LED SOLID GREEN
+                    sensorTelemetry.sdState = 'IDLE';
+                    updateSDSlotVisuals();
+                    playBuzzerBeep(1200, 0.15, 'sine');
+
+                    if (selectedModeIndex === 0) {
+                        renderLiveDashboard();
+                    } else {
+                        renderDiagnosticDashboard();
+                    }
+                }
+            }, 250);
+        }
+
+        // Render Live Dashboard (Telemetry + Parallel Stored Records)
+        function renderLiveDashboard() {
+            currentSystemState = 'live_monitor';
+            document.getElementById('screen-breadcrumb').innerText = "LIVE MEASUREMENT";
+            document.getElementById('screen-status-msg').innerText = "LIVE_ACTIVE";
+
+            const screen = document.getElementById('screen-view');
+            screen.innerHTML = `
+                <div class="w-full h-full flex flex-col justify-between space-y-2">
+                    
+                    <!-- Top Telemetry Metrics -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-slate-900/90 p-2 rounded-xl border border-slate-800 text-center">
+                            <span class="text-[9px] font-mono text-slate-400">TEMP (TMP36)</span>
+                            <div class="text-xl font-mono font-bold text-amber-400" id="val-temp">${sensorTelemetry.temperature}°C</div>
+                        </div>
+
+                        <div class="bg-slate-900/90 p-2 rounded-xl border border-slate-800 text-center">
+                            <span class="text-[9px] font-mono text-slate-400">HUMIDITY (DHT22)</span>
+                            <div class="text-xl font-mono font-bold text-blue-400" id="val-hum">${sensorTelemetry.humidity}%</div>
+                        </div>
+
+                        <div class="bg-slate-900/90 p-2 rounded-xl border border-slate-800 text-center">
+                            <span class="text-[9px] font-mono text-slate-400">VIB RMS (ADXL335)</span>
+                            <div class="text-xl font-mono font-bold text-emerald-400" id="val-vib">${sensorTelemetry.vibrationRMS} mm/s</div>
+                        </div>
+                    </div>
+
+                    <!-- Plain English Status Banner -->
+                    <div id="status-banner" class="bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-xs">
+                        <div class="flex items-center space-x-2">
+                            <span id="health-dot" class="w-3 h-3 rounded-full bg-emerald-400"></span>
+                            <span id="health-title" class="font-bold text-emerald-400">NORMAL OPERATION</span>
+                        </div>
+                        <span id="health-desc" class="text-[10px] text-slate-300 truncate max-w-xs">All parameters within optimal thresholds.</span>
+                    </div>
+
+                    <!-- Parallel Stored SD Telemetry Records Log with Status Filtering -->
+                    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col space-y-1.5 flex-1 min-h-0">
+                        <div class="flex flex-wrap items-center justify-between gap-1 border-b border-slate-800 pb-1.5">
+                            <span class="text-[10px] font-mono font-bold text-blue-400 flex items-center gap-1">
+                                <i class="fa-solid fa-database"></i> PARALLEL SD STORED LOGS
+                            </span>
+
+                            <!-- Dynamic Status Filter Buttons -->
+                            <div class="flex items-center space-x-1 font-mono text-[9px]">
+                                <button onclick="setLogFilter('ALL')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'ALL' ? 'bg-blue-500 text-slate-950 font-bold border-blue-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">ALL</button>
+                                <button onclick="setLogFilter('NORMAL')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'NORMAL' ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">NORMAL</button>
+                                <button onclick="setLogFilter('ANOMALY')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'ANOMALY' ? 'bg-amber-500 text-slate-950 font-bold border-amber-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">ANOMALY</button>
+                                <button onclick="setLogFilter('CRITICAL')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'CRITICAL' ? 'bg-red-500 text-slate-950 font-bold border-red-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">CRITICAL</button>
+                            </div>
+                        </div>
+
+                        <!-- Render Filtered Log Entries -->
+                        <div class="overflow-y-auto space-y-1 pr-1 flex-1 font-mono text-[10px]" id="logs-container">
+                            ${generateFilteredLogsHTML()}
+                        </div>
+                    </div>
+
+                </div>
+            `;
+
+            startTelemetryLoop();
+        }
+
+        // Render Diagnostic Dashboard
+        function renderDiagnosticDashboard() {
+            currentSystemState = 'diagnostic';
+            document.getElementById('screen-breadcrumb').innerText = "DIAGNOSTIC LOGGING";
+            document.getElementById('screen-status-msg').innerText = "SD_LOG_ACTIVE";
+
+            const app = availableApplications[selectedAppIndex];
+
+            const screen = document.getElementById('screen-view');
+            screen.innerHTML = `
+                <div class="w-full h-full flex flex-col justify-between space-y-2 font-mono text-xs">
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-400">SELECTED APPLIANCE</span>
+                            <div class="text-xs font-bold text-amber-400 flex items-center gap-1.5 mt-0.5">
+                                <i class="fa-solid ${app.icon}"></i> ${app.name}
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+                            <span class="text-[9px] text-slate-400">SD CARD STATUS</span>
+                            <div class="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                                <i class="fa-solid fa-circle text-[8px]"></i> SOLID GREEN (Safe To Eject)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filterable Records Log -->
+                    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col space-y-1.5 flex-1 min-h-0">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                            <span class="text-[10px] font-bold text-blue-400"><i class="fa-solid fa-list-check"></i> TIMESTAMPED DIAGNOSTIC LOGS</span>
+                            
+                            <!-- Dynamic Filter Tabs -->
+                            <div class="flex items-center space-x-1 text-[9px]">
+                                <button onclick="setLogFilter('ALL')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'ALL' ? 'bg-blue-500 text-slate-950 font-bold border-blue-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">ALL</button>
+                                <button onclick="setLogFilter('NORMAL')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'NORMAL' ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">NORMAL</button>
+                                <button onclick="setLogFilter('ANOMALY')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'ANOMALY' ? 'bg-amber-500 text-slate-950 font-bold border-amber-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">ANOMALY</button>
+                                <button onclick="setLogFilter('CRITICAL')" class="px-1.5 py-0.5 rounded border ${activeRecordFilter === 'CRITICAL' ? 'bg-red-500 text-slate-950 font-bold border-red-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">CRITICAL</button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-y-auto space-y-1 pr-1 flex-1 text-[10px]" id="logs-container">
+                            ${generateFilteredLogsHTML()}
+                        </div>
+                    </div>
+
+                    <button onclick="startScanningAndLoggingSequence()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-slate-100 font-bold font-mono rounded-lg transition active:scale-98 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate text-xs"></i> Trigger Scan & Append Timestamp Entry
+                    </button>
+                </div>
+            `;
+
+            startTelemetryLoop();
+        }
+
+        // Filter Controls for Stored Records
+        function setLogFilter(filterKey) {
+            activeRecordFilter = filterKey;
+            playBuzzerBeep(900, 0.05);
+
+            const container = document.getElementById('logs-container');
+            if (container) {
+                container.innerHTML = generateFilteredLogsHTML();
+            }
+
+            // Re-render tabs highlighting
+            if (currentSystemState === 'live_monitor') renderLiveDashboard();
+            if (currentSystemState === 'diagnostic') renderDiagnosticDashboard();
+        }
+
+        // Generate Log Items HTML based on active status filter
+        function generateFilteredLogsHTML() {
+            const filtered = sensorTelemetry.recordLogs.filter(item => {
+                if (activeRecordFilter === 'ALL') return true;
+                return item.status === activeRecordFilter;
+            });
+
+            if (filtered.length === 0) {
+                return `<div class="p-3 text-center text-slate-500 italic">No logged records found matching filter [${activeRecordFilter}].</div>`;
+            }
+
+            return filtered.map(log => {
+                let badgeClass = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+                if (log.status === 'ANOMALY') badgeClass = "bg-amber-500/20 text-amber-400 border-amber-500/30";
+                if (log.status === 'CRITICAL') badgeClass = "bg-red-500/20 text-red-400 border-red-500/30";
+
+                return `
+                    <div class="p-2 rounded bg-slate-950 border border-slate-800 flex flex-col space-y-1">
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="text-slate-400 font-mono"><i class="fa-solid fa-clock text-amber-400"></i> ${log.timestamp}</span>
+                            <span class="text-slate-200 font-bold">T: ${log.temp} | V: ${log.vib}</span>
+                            <span class="px-1.5 py-0.2 rounded border ${badgeClass} text-[9px] font-bold">${log.status}</span>
+                        </div>
+                        <p class="text-[10px] text-slate-300 font-sans italic">"${log.note}"</p>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Live Dynamic Telemetry Loop
+        function startTelemetryLoop() {
+            if (telemetryTimer) clearInterval(telemetryTimer);
+
+            telemetryTimer = setInterval(() => {
+                const tempSlider = document.getElementById('sim-temp-slider');
+                const vibSlider = document.getElementById('sim-vib-slider');
+
+                if (tempSlider && vibSlider) {
+                    let tVal = parseFloat(tempSlider.value);
+                    let vVal = parseFloat(vibSlider.value);
+
+                    if (tVal > 80 || vVal > 6.0) {
+                        systemHealthState = 'CRITICAL';
+                    } else if (tVal > 60 || vVal > 3.0) {
+                        systemHealthState = 'ANOMALY';
+                    } else {
+                        systemHealthState = 'NORMAL';
+                    }
+
+                    sensorTelemetry.temperature = tVal;
+                    sensorTelemetry.vibrationRMS = vVal;
+                    sensorTelemetry.humidity = +(50 + Math.sin(Date.now() / 1200) * 4).toFixed(1);
+
+                    if (currentSystemState === 'live_monitor') {
+                        const tempEl = document.getElementById('val-temp');
+                        const humEl = document.getElementById('val-hum');
+                        const vibEl = document.getElementById('val-vib');
+
+                        if (tempEl) tempEl.innerText = `${sensorTelemetry.temperature}°C`;
+                        if (humEl) humEl.innerText = `${sensorTelemetry.humidity}%`;
+                        if (vibEl) vibEl.innerText = `${sensorTelemetry.vibrationRMS} mm/s`;
+
+                        const dot = document.getElementById('health-dot');
+                        const title = document.getElementById('health-title');
+                        const desc = document.getElementById('health-desc');
+
+                        if (systemHealthState === 'NORMAL') {
+                            if (dot) dot.className = "w-3 h-3 rounded-full bg-emerald-400";
+                            if (title) { title.className = "font-bold text-emerald-400"; title.innerText = "NORMAL OPERATION"; }
+                            if (desc) desc.innerText = "All parameters within optimal thresholds.";
+                        } else if (systemHealthState === 'ANOMALY') {
+                            if (dot) dot.className = "w-3 h-3 rounded-full bg-amber-400";
+                            if (title) { title.className = "font-bold text-amber-400"; title.innerText = "SUSPECTED ANOMALY"; }
+                            if (desc) desc.innerText = "Elevated vibration detected in bearings.";
+                        } else {
+                            if (dot) dot.className = "w-3 h-3 rounded-full bg-red-400";
+                            if (title) { title.className = "font-bold text-red-400"; title.innerText = "CRITICAL CONDITION"; }
+                            if (desc) desc.innerText = "Thermal threshold exceeded! Stop equipment.";
+                        }
+                    }
+
+                    updatePWMDiagnosticLEDs(systemHealthState);
+                }
+            }, 1000);
+        }
+
+        // Manual Telemetry Tuning Sliders
+        function handleManualTelemetryTuning() {
+            const tempVal = document.getElementById('sim-temp-slider').value;
+            const vibVal = document.getElementById('sim-vib-slider').value;
+
+            document.getElementById('sim-temp-val').innerText = `${tempVal}°C`;
+            document.getElementById('sim-vib-val').innerText = `${vibVal}m/s`;
+
+            sensorTelemetry.temperature = parseFloat(tempVal);
+            sensorTelemetry.vibrationRMS = parseFloat(vibVal);
+
+            if (tempVal > 80 || vibVal > 6.0) {
+                systemHealthState = 'CRITICAL';
+            } else if (tempVal > 60 || vibVal > 3.0) {
+                systemHealthState = 'ANOMALY';
+            } else {
+                systemHealthState = 'NORMAL';
+            }
+
+            updatePWMDiagnosticLEDs(systemHealthState);
+        }
+
+        function setConditionPreset(presetState) {
+            const tempSlider = document.getElementById('sim-temp-slider');
+            const vibSlider = document.getElementById('sim-vib-slider');
+
+            if (presetState === 'NORMAL') {
+                tempSlider.value = 42;
+                vibSlider.value = 1.2;
+            } else if (presetState === 'ANOMALY') {
+                tempSlider.value = 68;
+                vibSlider.value = 3.9;
+            } else {
+                tempSlider.value = 94;
+                vibSlider.value = 7.8;
+            }
+
+            handleManualTelemetryTuning();
+            playBuzzerBeep(850, 0.08);
+        }
+
+        // Update PWM Status LEDs
+        function updatePWMDiagnosticLEDs(health) {
+            const ledNorm = document.getElementById('led-normal');
+            const ledAnom = document.getElementById('led-anomaly');
+            const ledCrit = document.getElementById('led-critical');
+
+            if (!ledNorm || !ledAnom || !ledCrit) return;
+
+            ledNorm.className = "w-4 h-4 rounded-full led-off mb-1 transition-all";
+            ledAnom.className = "w-4 h-4 rounded-full led-off mb-1 transition-all";
+            ledCrit.className = "w-4 h-4 rounded-full led-off mb-1 transition-all";
+
+            if (health === 'NORMAL') {
+                ledNorm.className = "w-4 h-4 rounded-full led-solid-green mb-1 transition-all";
+            } else if (health === 'ANOMALY') {
+                ledAnom.className = "w-4 h-4 rounded-full led-solid-yellow mb-1 transition-all";
+            } else {
+                ledCrit.className = "w-4 h-4 rounded-full led-solid-red mb-1 transition-all";
+            }
+        }
+
+        // SD Card Safety Eject Behavior
+        function handleSDEjectTrigger() {
+            if (sensorTelemetry.sdState === 'SCANNING_WRITE') {
+                // Ejected while SOLID RED -> Trigger Error Alarm Toast!
+                sensorTelemetry.sdState = 'EJECTED';
+                updateSDSlotVisuals();
+                showToast("CRITICAL SD WRITE ERROR!", "Card ejected during active write cycle! Data corrupted.", "error");
+                playBuzzerBeep(220, 0.4, 'sawtooth');
+
+                setTimeout(() => {
+                    sensorTelemetry.sdState = 'IDLE';
+                    updateSDSlotVisuals();
+                    showToast("SD Card Re-inserted", "FAT32 partition re-initialized.", "success");
+                }, 3500);
+            } else if (sensorTelemetry.sdState === 'EJECTED') {
+                sensorTelemetry.sdState = 'IDLE';
+                updateSDSlotVisuals();
+                showToast("SD Card Inserted", "Ready for data logging.", "success");
+            } else {
+                sensorTelemetry.sdState = 'EJECTED';
+                updateSDSlotVisuals();
+                showToast("SD Card Safely Removed", "LED was Solid Green. Safe removal verified.", "info");
+            }
+        }
+
+        function updateSDSlotVisuals() {
+            const indicator = document.getElementById('sd-led-indicator');
+            const statusText = document.getElementById('sd-status-text');
+
+            if (!indicator || !statusText) return;
+
+            if (sensorTelemetry.sdState === 'SCANNING_WRITE') {
+                indicator.className = "w-3.5 h-3.5 rounded-full led-solid-red transition-all"; // Solid Red (Non-blinking)
+                statusText.innerText = "SD: BUSY (SOLID RED)";
+                statusText.className = "text-red-400 font-bold font-mono";
+            } else if (sensorTelemetry.sdState === 'IDLE') {
+                indicator.className = "w-3.5 h-3.5 rounded-full led-solid-green transition-all"; // Solid Green
+                statusText.innerText = "SD: SAFE TO REMOVE";
+                statusText.className = "text-emerald-400 font-bold font-mono";
+            } else {
+                indicator.className = "w-3.5 h-3.5 rounded-full led-off transition-all";
+                statusText.innerText = "SD: EJECTED";
+                statusText.className = "text-amber-400 font-bold font-mono";
+            }
+        }
+
+        // Mode Switch Keypad Controls
+        function handleKeypadAction(action) {
+            playBuzzerBeep(880, 0.05);
+
+            const btn = document.getElementById(`btn-${action}`);
+            if (btn) {
+                btn.classList.add('active-press');
+                setTimeout(() => btn.classList.remove('active-press'), 120);
+            }
+
+            if (currentSystemState === 'app_select') {
+                if (action === 'up') {
+                    selectedAppIndex = (selectedAppIndex - 1 + availableApplications.length) % availableApplications.length;
+                    renderAppSelectionUI();
+                } else if (action === 'down') {
+                    selectedAppIndex = (selectedAppIndex + 1) % availableApplications.length;
+                    renderAppSelectionUI();
+                } else if (action === 'select') {
+                    renderModeSelectionMenu();
+                } else if (action === 'back') {
+                    triggerSystemReboot();
+                }
+            } else if (currentSystemState === 'mode_select') {
+                if (action === 'up') {
+                    selectedModeIndex = (selectedModeIndex - 1 + availableModes.length) % availableModes.length;
+                    renderModeSelectionUI();
+                } else if (action === 'down') {
+                    selectedModeIndex = (selectedModeIndex + 1) % availableModes.length;
+                    renderModeSelectionUI();
+                } else if (action === 'select') {
+                    startScanningAndLoggingSequence();
+                } else if (action === 'back') {
+                    renderAppSelectionMenu();
+                }
+            } else if (currentSystemState === 'live_monitor' || currentSystemState === 'diagnostic') {
+                if (action === 'back') {
+                    renderModeSelectionMenu();
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
