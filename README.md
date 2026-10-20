@@ -1,80 +1,57 @@
-# STM32-Based Smart Acquisition and Diagnostic Instrument
+# STM32-Based Smart Data Acquisition and Diagnostic Instrument
 
-## 📌 Project Overview
+## Project Overview
+This project presents an interactive web-based prototype of an STM32-based Smart Data Acquisition and Diagnostic Instrument. It demonstrates a proposed embedded system for monitoring equipment conditions and identifying abnormal operating states using temperature and vibration measurements.
 
-The **STM32-Based Smart Acquisition and Diagnostic Instrument** is a portable, multi-functional monitoring prototype designed to measure physical parameters and identify abnormal operating conditions in equipment such as motors and industrial appliances.
+## Prototype Features
+- Industrial induction motor, hydraulic pump, and HVAC compressor application selection.
+- Live Measurement Mode and Diagnostic Logging Mode.
+- Simulated temperature, humidity, and vibration measurements.
+- Normal, Anomaly, and Critical condition classification.
+- Interactive diagnostic LEDs and simulated buzzer alerts.
+- Simulated SD card logging with timestamps and status filtering.
+- SD card eject behavior and system reboot controls.
+- Keyboard navigation using arrow keys, Enter, Backspace, and Escape.
 
-The system integrates temperature, humidity, and vibration sensing into a single instrument. It displays real-time measurements, provides visual and audible alerts, and stores time-stamped diagnostic data on an SD card for further analysis.
+## Technologies Used
+- HTML5
+- CSS3 and Tailwind CSS
+- JavaScript
+- Font Awesome
+- GitHub
+- GitHub Pages
 
-## 🎯 Objectives
+## Live Prototype
+**[Click here to explore the interactive prototype]([https://MrFool-07.github.io/STM_32_PROTOTYPE/])**
 
-- Monitor equipment operating conditions using multiple sensors.
-- Identify potential abnormal conditions through configurable diagnostic thresholds.
-- Display real-time sensor readings on a TFT display.
-- Provide visual health indications using PWM-controlled LEDs.
-- Record sensor readings with timestamps for future reference.
-- Develop a compact and user-friendly instrument for equipment monitoring.
+Replace the example URL with your published GitHub Pages URL.
 
-## ⚙️ Key Features
+## How to Use
+1. Open the live prototype using the link above.
+2. Allow the startup diagnostic sequence to complete.
+3. Select an application to monitor.
+4. Choose Live Measurement Mode or Diagnostic Logging Mode.
+5. Adjust the temperature and vibration sliders to simulate operating conditions.
+6. Use the Normal, Anomaly, and Critical presets to test the status indicators.
+7. Explore the diagnostic logs, filters, and SD card controls.
 
-- **Multi-Sensor Monitoring:** Measures temperature, humidity, and vibration.
-- **Real-Time Display:** Presents sensor readings and operating status on a TFT display.
-- **Equipment Health Indication:** Uses LEDs to indicate normal, suspected-anomaly, and critical conditions.
-- **Diagnostic Data Logging:** Stores sensor measurements and timestamps on an SD card.
-- **Real-Time Clock (RTC):** Maintains timestamps for recorded measurements.
-- **Mode Selection:** Push buttons allow users to select applications and switch between measurement and diagnostic modes.
-- **Audible Feedback:** A buzzer provides feedback for button actions, mode selection, and relevant warnings.
-- **Safe SD Card Handling:** Indicates when data is being written and when the card is safe to remove.
+## Implementation Note
+This repository contains a web-based simulation. Sensor values, diagnostic alerts, timestamps, and SD card operations are simulated in JavaScript. They do not represent actual readings from an STM32 microcontroller or physical sensors.
 
-## 🛠️ Hardware Components
+The proposed hardware system may integrate an STM32 microcontroller, temperature sensor, humidity sensor, vibration sensor, TFT display, RTC, SD card module, push buttons, diagnostic LEDs, and buzzer.
 
-| Component | Purpose |
-|---|---|
-| STM32 Microcontroller | Main processing and control unit |
-| Temperature Sensor | Monitors equipment temperature |
-| Humidity Sensor | Measures surrounding humidity |
-| Vibration Sensor | Detects equipment vibration |
-| TFT Display | Displays measurements and diagnostic status |
-| SD Card Module | Stores diagnostic data |
-| RTC Module | Provides date and time information |
-| Push Buttons | Select modes and navigate the interface |
-| PWM-Controlled LEDs | Indicate equipment health status |
-| Buzzer | Provides audible alerts |
+## Future Enhancements
+- Integration with physical STM32 hardware and sensors.
+- Real-time sensor data acquisition.
+- Hardware-based SD card data logging.
+- Improved diagnostic algorithms and threshold configuration.
+- Historical data analysis and remote monitoring.
 
-## 💻 Technologies Used
+## Project Information
+**Project Type:** S5 Mini Project  
+**Domain:** Electronics and Communication Engineering  
+**Application:** Equipment Condition Monitoring  
+**Prototype Type:** Interactive Web Simulation
 
-- Embedded C / C++ for firmware development
-- STM32 microcontroller platform
-- HTML, CSS, and JavaScript for the web-based prototype
-- GitHub for source code management
-- GitHub Pages for hosting the web prototype
-
-## 🔄 System Workflow
-
-1. **System Initialization:** The instrument starts with a loading animation and performs peripheral checks.
-2. **Application Selection:** The user selects the equipment or application to monitor.
-3. **Mode Selection:** The user chooses measurement mode or diagnostic mode.
-4. **Data Acquisition:** The STM32 reads the connected sensors and processes their measurements.
-5. **Status Indication:** The TFT display and LEDs present the readings and corresponding equipment health status.
-6. **Data Logging:** In diagnostic mode, sensor readings are recorded with timestamps on the SD card.
-7. **Safe Removal Indication:** The instrument indicates when writing is complete and the SD card can be safely removed.
-
-## 🌐 Interactive Web Prototype
-
-The web prototype demonstrates the proposed instrument's interface, monitoring concept, and diagnostic workflow.
-
-**Live Prototype:** [Click here to access the website](https://your-username.github.io/your-repository/)
-
-*Replace the example URL with the actual GitHub Pages link after deployment.*
-
-## 📂 Repository Structure
-
-```text
-STM32-Smart-Diagnostic-Instrument/
-├── index.html
-├── style.css
-├── script.js
-└── README.md
-```
-
-The repository contains the web prototype files. Embedded firmware and hardware
+---
+Developed as part of an academic mini project in Electronics and Communication Engineering.
