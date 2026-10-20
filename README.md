@@ -22,7 +22,7 @@ This project presents an interactive web-based prototype of an STM32-based Smart
 - GitHub Pages
 
 ## Live Prototype
-**[Click here to explore the interactive prototype]([https://MrFool-07.github.io/STM_32_PROTOTYPE/])**
+**[Click here to explore the interactive prototype]([https://MrFool-07.github.io/STM_32_PROTOTYPE/])
 
 Replace the example URL with your published GitHub Pages URL.
 
